@@ -1,5 +1,6 @@
 package com.task.todolist.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +10,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.task.todolist.entity.RatingsEnum;
+import com.task.todolist.entity.Status;
 import com.task.todolist.entity.Task;
 import com.task.todolist.service.TaskService;
 
@@ -24,10 +28,10 @@ public class TaskControllerImpl implements TaskController {
 	@Autowired
 	private TaskService taskService;
 
-	public ResponseEntity<List<Task>> findAllTask() {
+	public ResponseEntity<List<Task>> findAllTask(@RequestParam int pageNumber, @RequestParam int pageSize) {
 		try {
 			log.info("fetching all tasks");
-			List<Task> taskList = taskService.getAllTask();
+			List<Task> taskList = taskService.getAllTask(pageNumber, pageSize);
 			log.info("taskList :{} ", taskList);
 			if (!taskList.isEmpty()) {
 				return new ResponseEntity<List<Task>>(taskList, HttpStatus.OK);
@@ -172,11 +176,25 @@ public class TaskControllerImpl implements TaskController {
 	}
 
 	@Override
-	@Scheduled(fixedRate = 6000)
-	public String schedularNotification() {
+	public List<Task> schedularNotification() {
 		try {
-			String string = taskService.ScheduleNotification();
-			return string;
+			return taskService.ScheduleNotification();
+
+		} catch (Exception e) {
+			log.error(e.toString());
+		}
+		return null;
+	}
+
+	@Override
+	public List<Task> getByTitleName(String title) {
+		try {
+			if (title != null && !title.equals("")) {
+				log.info("getByStatusAndRatings is called");
+				return taskService.findByTitleName(title);
+			} else {
+				log.info("title value must not be null");
+			}
 		} catch (Exception e) {
 			log.error(e.toString());
 		}

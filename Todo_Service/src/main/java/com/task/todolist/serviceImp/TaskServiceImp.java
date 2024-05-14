@@ -7,12 +7,20 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.task.todolist.entity.RatingsEnum;
+import com.task.todolist.entity.Status;
 import com.task.todolist.entity.Task;
 import com.task.todolist.repository.TaskRepository;
+import com.task.todolist.repository.TaskSearchDAO;
 import com.task.todolist.service.TaskService;
 
+import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -21,6 +29,11 @@ public class TaskServiceImp implements TaskService {
 
 	@Autowired
 	private TaskRepository taskRepository;
+
+	@Autowired
+	private TaskSearchDAO taskSearchDAO;
+
+	public static List<Task> notificationTask;
 
 	public TaskServiceImp(TaskRepository taskRepository) {
 		super();
@@ -44,10 +57,11 @@ public class TaskServiceImp implements TaskService {
 	}
 
 	@Override
-	public List<Task> getAllTask() {
-
+	public List<Task> getAllTask(int pageNumber, int pageSize) {
 		try {
-			List<Task> taskList = taskRepository.findAll();
+			Pageable pageable = PageRequest.of(pageNumber, pageSize);
+			Page<Task> pageList = taskRepository.findAll(pageable);
+			List<Task> taskList = pageList.getContent();
 			log.info("list of tasks:{} ", taskList);
 			if (!taskList.isEmpty()) {
 				log.info("taskList is not empty");
@@ -89,6 +103,13 @@ public class TaskServiceImp implements TaskService {
 						task.getUserId());
 				log.info("existingTask :{}", existingTask);
 				if (existingTask.isEmpty()) {
+					List<Task> taskList = taskRepository.findByuserId(task.getUserId());
+					for (Task checkTask : taskList) {
+						if ((task.getCompletionDate()).isBefore(checkTask.getCompletionDate().plusMinutes(30))) {
+							log.info("task already present on given time");
+							return null;
+						}
+					}
 					log.info("existingTask is empty we can add new task");
 					Task newTask = new Task();
 
@@ -102,9 +123,9 @@ public class TaskServiceImp implements TaskService {
 					newTask.setTodoType(task.getTodoType());
 					newTask.setTags(task.getTags());
 					return taskRepository.save(newTask);
+
 				}
 			}
-
 		} catch (Exception e) {
 			log.error("exception in addTask : {}", e);
 		}
@@ -185,6 +206,7 @@ public class TaskServiceImp implements TaskService {
 	public List<Task> getTaskByCreationDate(LocalDate creationDate) {
 		try {
 			List<Task> task = taskRepository.findTaskByCreationDate(creationDate);
+
 			log.info("taskList :{}", task);
 			if (!task.isEmpty()) {
 				return task;
@@ -217,34 +239,63 @@ public class TaskServiceImp implements TaskService {
 		return null;
 	}
 
-	@Override
-	public String ScheduleNotification() {
-		System.out.println("scheduler");
-		LocalDateTime currentTime = LocalDateTime.now();
-
-		List<Task> taskList = taskRepository.findAll();
-		for (Task task : taskList) {
-			System.out.println(currentTime);
-			LocalDateTime complitiontime = task.getCompletionDate();
-			System.out.println(complitiontime);
-			System.out.println(task.getCompletionDate());
-//			if (task.getCompletionDate().isAfter(currentTime) && task.getCompletionDate().isBefore(complitiontime)) {
-			if (currentTime.withSecond(0).withNano(0).equals(complitiontime.minusHours(1).withSecond(0).withNano(0))) {
-				System.out.println("your task" + task.getTitle() + " is near complition date");
-				return "your task" + task.getTitle() + " is near complition date";
-			}
-		}
-		return null;
-
-//		for(Task task: taskRepository.findAll()) {
-//			
-//			if(task.getCompletionDate().minusHours(1).withSecond(0)==LocalDateTime.now().withSecond(0)){
-//				System.out.println(task);
-//				return "complete your task";
+//===================== for one minutes scheduler==================
+//	@Override
+//	@Scheduled(fixedRate = 60000)
+//	public List<Task> ScheduleNotification() {
+//		System.out.println("scheduler");
+//		LocalDateTime currentTime = LocalDateTime.now();
+//
+//		List<Task> taskList = taskRepository.findAll();
+//		for (Task task : taskList) {
+//
+//			System.out.println(currentTime);
+//			LocalDateTime complitiontime = task.getCompletionDate();
+//			System.out.println(complitiontime);
+//			System.out.println(task.getCompletionDate());
+//
+//			if (currentTime.withSecond(0).withNano(0).equals(complitiontime.minusHours(1).withSecond(0).withNano(0))) {
+//				System.out.println("your task" + task.getTitle() + " is near complition date");
 //			}
 //		}
 //		return null;
+//	}
+//}
+//=======================end==========================================
+//--------------------for one hours-----------------------------------
+	@Override
+	@Scheduled(fixedRate = 60 * 60 * 1000)
+	public List<Task> ScheduleNotification() {
+		log.info("schedulerHours");
+		LocalDateTime startTime = LocalDateTime.now().plusHours(1);
+		LocalDateTime endTime = LocalDateTime.now().plusHours(2);
+		log.info(startTime + "," + endTime);
+		Status notifystatus = Status.INPROGRESS;
+		notificationTask = taskRepository.findByCompletionDateBetweenAndStatus(startTime, endTime, notifystatus).get();
+		log.info(notificationTask.toString());
+		return notificationTask;
+	}
+
+	@Scheduled(fixedRate = 60 * 1000)
+	public void subScheduleNotification() {
+		log.info("schedulerMinutes");
+		LocalDateTime currentTime = LocalDateTime.now();
+		log.info(notificationTask.toString());
+		for (Task task : notificationTask) {
+			log.info(currentTime.toString());
+			LocalDateTime complitiontime = task.getCompletionDate();
+			log.info(complitiontime.toString());
+			log.info(task.getCompletionDate().toString());
+			if (currentTime.withSecond(0).withNano(0).equals(complitiontime.minusHours(1).withSecond(0).withNano(0))) {
+				log.info("your task" + task.getTitle() + " is near complition date");
+			}
+		}
+	}
+//-------------------------------end--------------------------------------	
+
+	@Override
+	public List<Task> findByTitleName(String title) {
+		return taskSearchDAO.findByTitleName(title);
 	}
 
 }
-
